@@ -1,21 +1,110 @@
 {
   "name": "vscode-udonsharp-linter",
-  "displayName": "vscode-udonsharp-linter",
-  "description": "A linter and static analyzer for UdonSharp",
+  "displayName": "UdonSharp Linter",
+  "description": "Real-time UdonSharp static analysis for VSCode with Roslyn-based diagnostics, code actions, and in-editor guidance.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.105.0"
   },
   "categories": [
-    "Other"
+    "Linters"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:csharp",
+    "onCommand:udonsharpLinter.switchProfile",
+    "onCommand:udonsharpLinter.searchRules",
+    "onCommand:udonsharpLinter.openRuleDocs",
+    "workspaceContains:**/*.cs"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "vscode-udonsharp-linter.helloWorld",
-        "title": "Hello World"
+        "command": "udonsharpLinter.switchProfile",
+        "title": "UdonSharp Linter: Switch Profile",
+        "category": "UdonSharp Linter"
+      },
+      {
+        "command": "udonsharpLinter.searchRules",
+        "title": "UdonSharp Linter: Search Rules…",
+        "category": "UdonSharp Linter"
+      },
+      {
+        "command": "udonsharpLinter.openRuleDocs",
+        "title": "UdonSharp Linter: Open Rule Documentation",
+        "category": "UdonSharp Linter"
+      }
+    ],
+    "configuration": {
+      "title": "UdonSharp Linter",
+      "type": "object",
+      "properties": {
+        "udonsharpLinter.profile": {
+          "type": "string",
+          "default": "latest",
+          "enum": [
+            "latest",
+            "legacy_0.x",
+            "strict_experimental"
+          ],
+          "description": "Selects the constraint profile that maps to the corresponding UdonSharp/VRChat SDK policy pack."
+        },
+        "udonsharpLinter.rules": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Overrides the severity for individual rules (e.g. { \"USL007\": \"off\" }). Values: error, warn, info, off.",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warn",
+              "info",
+              "off"
+            ]
+          }
+        },
+        "udonsharpLinter.unityApiSurface": {
+          "type": "string",
+          "default": "bundled-stubs",
+          "enum": [
+            "bundled-stubs",
+            "custom-stubs",
+            "none"
+          ],
+          "description": "Controls the Unity/VRChat API reference assemblies used for semantic analysis."
+        },
+        "udonsharpLinter.customStubPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a directory that contains custom Unity/VRChat ref-only stub assemblies when unityApiSurface is set to custom-stubs."
+        },
+        "udonsharpLinter.allow.refOut": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, ref/out/in parameters are treated as allowed within the current workspace."
+        },
+        "udonsharpLinter.codeActions.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enables Roslyn code fixes and quick fixes supplied by the linter."
+        },
+        "udonsharpLinter.telemetry": {
+          "type": "string",
+          "default": "minimal",
+          "enum": [
+            "off",
+            "minimal"
+          ],
+          "description": "Controls the level of telemetry collected by the extension."
+        },
+        "udonsharpLinter.policyPackPaths": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional policy pack JSON files to load on top of the bundled packs."
+        }
       }
     ],
     "problemMatchers": [
@@ -56,7 +145,7 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint client/src",
     "test": "vscode-test"
   },
   "devDependencies": {
@@ -71,5 +160,8 @@
     "typescript": "^5.9.3",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }
