@@ -4,3 +4,30 @@ node_modules
 .vscode-test/
 *.vsix
 .idea
+
+# VS Code workspace settings
+.vscode/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript build info
+*.tsbuildinfo
+
+# .NET build output and caches
+**/bin/
+**/obj/
+*.user
+*.suo
+*.cache
+*.nuget.dgspec.json
+*.nuget.g.props
+*.nuget.g.targets
+project.lock.json
+/.vs/

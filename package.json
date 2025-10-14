@@ -26,7 +26,7 @@
       },
       {
         "command": "udonsharpLinter.searchRules",
-        "title": "UdonSharp Linter: Search Rules…",
+        "title": "UdonSharp Linter: Search Rules...",
         "category": "UdonSharp Linter"
       },
       {
@@ -52,7 +52,7 @@
         "udonsharpLinter.rules": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Overrides the severity for individual rules (e.g. { \"USL007\": \"off\" }). Values: error, warn, info, off.",
+          "markdownDescription": "Overrides the severity for individual rules (e.g. { \\\"USL007\\\": \\\"off\\\" }). Values: error, warn, info, off.",
           "additionalProperties": {
             "type": "string",
             "enum": [
@@ -106,7 +106,7 @@
           "description": "Additional policy pack JSON files to load on top of the bundled packs."
         }
       }
-    ],
+    },
     "problemMatchers": [
       {
         "name": "esbuild-watch",
