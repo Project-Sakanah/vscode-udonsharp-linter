@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
     <RootNamespace>UdonSharpLsp.Server</RootNamespace>
-    <AssemblyName>UdonSharpLsp.Server</AssemblyName>
+    <AssemblyName>udonsharp-lsp</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.10.0" />
