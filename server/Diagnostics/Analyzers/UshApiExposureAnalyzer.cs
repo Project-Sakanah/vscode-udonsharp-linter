@@ -41,11 +41,21 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         "global::UnityEngine.Component.gameObject",
         "global::UnityEngine.GameObject.gameObject");
 
+    private static readonly ImmutableArray<string> ForbiddenMethodNames = ImmutableArray.Create(
+        "global::UnityEngine.Component.GetComponent",
+        "global::UnityEngine.Component.GetComponents",
+        "global::UnityEngine.GameObject.GetComponent",
+        "global::UnityEngine.GameObject.GetComponents");
+
     private static readonly ImmutableHashSet<string> ForbiddenMemberNamesNormalized = ForbiddenMemberNames
         .Select(NormalizeQualifiedName)
         .ToImmutableHashSet(StringComparer.Ordinal);
 
     private static readonly ImmutableHashSet<string> ForbiddenTypeNamesNormalized = ForbiddenTypeNames
+        .Select(NormalizeQualifiedName)
+        .ToImmutableHashSet(StringComparer.Ordinal);
+
+    private static readonly ImmutableHashSet<string> ForbiddenMethodNamesNormalized = ForbiddenMethodNames
         .Select(NormalizeQualifiedName)
         .ToImmutableHashSet(StringComparer.Ordinal);
 
@@ -71,23 +81,13 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var methodSymbols = GetMethodCandidates(symbolInfo);
         if (methodSymbols.Length == 0)
         {
-            var syntaxMethodName = GetInvocationMethodName(invocation.Expression);
-            if (IsForbiddenGetComponentName(syntaxMethodName))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    UshRuleDescriptors.Ush0013,
-                    invocation.GetLocation(),
-                    syntaxMethodName ?? "GetComponent"));
-                return;
-            }
-
             var qualifiedExpression = GetQualifiedExpressionName(invocation.Expression);
-            if (MatchesForbiddenNamespace(qualifiedExpression))
+            if (IsForbiddenQualifiedMethod(qualifiedExpression))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UshRuleDescriptors.Ush0013,
                     invocation.GetLocation(),
-                    syntaxMethodName ?? qualifiedExpression ?? invocation.ToString()));
+                    qualifiedExpression ?? invocation.ToString()));
                 return;
             }
 
@@ -133,13 +133,6 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            if (MatchesForbiddenNamespace(memberText))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    UshRuleDescriptors.Ush0014,
-                    access.Name.GetLocation(),
-                    access.Name.Identifier.Text));
-            }
             return;
         }
 
@@ -235,15 +228,8 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
     private static bool IsForbiddenGetComponent(IMethodSymbol method)
     {
         var definition = method.OriginalDefinition;
-        if (!string.Equals(definition.Name, "GetComponent", StringComparison.Ordinal) &&
-            !string.Equals(definition.Name, "GetComponents", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var containingType = definition.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        return string.Equals(containingType, "global::UnityEngine.Component", StringComparison.Ordinal) ||
-               string.Equals(containingType, "global::UnityEngine.GameObject", StringComparison.Ordinal);
+        var display = definition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return ForbiddenMethodNamesNormalized.Contains(NormalizeQualifiedName(display));
     }
 
     private static void ReportForbiddenType(SyntaxNodeAnalysisContext context, ITypeSymbol typeSymbol, Location location)
@@ -376,24 +362,15 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         return ForbiddenMemberNamesNormalized.Contains(normalized);
     }
 
-    private static bool IsForbiddenGetComponentName(string? methodName)
+    private static bool IsForbiddenQualifiedMethod(string? qualifiedName)
     {
-        return string.Equals(methodName, "GetComponent", StringComparison.Ordinal) ||
-               string.Equals(methodName, "GetComponents", StringComparison.Ordinal);
-    }
-
-    private static string? GetInvocationMethodName(ExpressionSyntax expression)
-    {
-        return expression switch
+        var normalized = NormalizeQualifiedName(qualifiedName);
+        if (string.IsNullOrEmpty(normalized))
         {
-            MemberAccessExpressionSyntax memberAccess => GetSimpleName(memberAccess.Name),
-            MemberBindingExpressionSyntax memberBinding => GetSimpleName(memberBinding.Name),
-            ConditionalAccessExpressionSyntax conditional => GetInvocationMethodName(conditional.WhenNotNull),
-            IdentifierNameSyntax identifier => identifier.Identifier.Text,
-            GenericNameSyntax generic => generic.Identifier.Text,
-            SimpleNameSyntax simple => simple.Identifier.Text,
-            _ => null,
-        };
+            return false;
+        }
+
+        return ForbiddenMethodNamesNormalized.Contains(normalized);
     }
 
     private static string? GetQualifiedExpressionName(ExpressionSyntax expression)

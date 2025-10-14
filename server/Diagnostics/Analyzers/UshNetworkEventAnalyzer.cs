@@ -71,8 +71,13 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var targetBehaviour = ResolveTargetBehaviour(invocation, methodSymbol, context.SemanticModel, context.CancellationToken);
-        if (targetBehaviour is null || !UshAnalyzerUtilities.IsUdonSharpBehaviour(targetBehaviour))
+        var targetBehaviour = DetermineTargetBehaviour(invocation, methodSymbol, resolvedMethodSymbol, context.SemanticModel, context.CancellationToken);
+        if (targetBehaviour is null)
+        {
+            return;
+        }
+
+        if (!UshAnalyzerUtilities.IsUdonSharpBehaviour(targetBehaviour))
         {
             return;
         }
@@ -327,9 +332,30 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
         return expressionType as INamedTypeSymbol;
     }
 
+    private static INamedTypeSymbol? DetermineTargetBehaviour(
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol? methodSymbol,
+        IMethodSymbol? resolvedMethodSymbol,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken)
+    {
+        if (resolvedMethodSymbol?.ContainingType is INamedTypeSymbol containing &&
+            UshAnalyzerUtilities.IsUdonSharpBehaviour(containing))
+        {
+            return containing;
+        }
+
+        if (methodSymbol is null)
+        {
+            return null;
+        }
+
+        return ResolveTargetBehaviour(invocation, methodSymbol, semanticModel, cancellationToken);
+    }
+
     private static INamedTypeSymbol? ResolveTargetBehaviour(
         InvocationExpressionSyntax invocation,
-        IMethodSymbol? symbol,
+        IMethodSymbol symbol,
         SemanticModel semanticModel,
         CancellationToken cancellationToken)
     {
@@ -348,7 +374,7 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
             return containingType;
         }
 
-        return symbol?.ContainingType as INamedTypeSymbol;
+        return symbol.ContainingType as INamedTypeSymbol;
     }
 
     private sealed class MethodSymbolComparer : IEqualityComparer<IMethodSymbol>
