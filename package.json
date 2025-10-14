@@ -17,6 +17,32 @@
         "command": "vscode-udonsharp-linter.helloWorld",
         "title": "Hello World"
       }
+    ],
+    "problemMatchers": [
+      {
+        "name": "esbuild-watch",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started$",
+          "endsPattern": "^\\[watch\\] build finished$"
+        },
+        "pattern": [
+          {
+            "regexp": "^✁E\\[ERROR\\] (.*)$",
+            "message": 1
+          },
+          {
+            "regexp": "^\\s+(.+):(\\d+):(\\d+):$",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ]
+      }
     ]
   },
   "scripts": {
