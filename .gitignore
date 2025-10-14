@@ -31,3 +31,5 @@ yarn-error.log*
 *.nuget.g.targets
 project.lock.json
 /.vs/
+
+/resources

@@ -10,7 +10,9 @@ using UdonSharpLsp.Server.PolicyPacks;
 namespace UdonSharpLsp.Server.Handlers;
 
 [Method("udonsharp/server/status")]
-public sealed class ServerStatusHandler : IJsonRpcRequestHandler<ServerStatusRequest, ServerStatusResponse>
+public sealed class ServerStatusHandler :
+    IJsonRpcRequestHandler<ServerStatusRequest, ServerStatusResponse>,
+    IRequestHandler<ServerStatusRequest, ServerStatusResponse>
 {
     private readonly PolicyRepository _policyRepository;
     private readonly SettingsProvider _settingsProvider;

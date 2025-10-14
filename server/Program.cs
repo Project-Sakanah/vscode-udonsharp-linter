@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,8 +20,22 @@ var logsDirectory = Path.Combine(baseDirectory, "logs");
 Directory.CreateDirectory(logsDirectory);
 var serverLogPath = Path.Combine(logsDirectory, "server.log");
 var fatalLogPath = Path.Combine(logsDirectory, "fatal.log");
+var bootLogPath = Path.Combine(logsDirectory, "boot.log");
+
+File.AppendAllText(bootLogPath, $"{DateTime.UtcNow:O} PID {Environment.ProcessId} BOOT{Environment.NewLine}");
 
 Console.SetOut(TextWriter.Null);
+
+AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+{
+    File.AppendAllText(fatalLogPath, $"{DateTime.UtcNow:O} UNHANDLED {args.ExceptionObject}{Environment.NewLine}");
+};
+
+TaskScheduler.UnobservedTaskException += (_, args) =>
+{
+    File.AppendAllText(fatalLogPath, $"{DateTime.UtcNow:O} UNOBSERVED {args.Exception}{Environment.NewLine}");
+    args.SetObserved();
+};
 
 try
 {

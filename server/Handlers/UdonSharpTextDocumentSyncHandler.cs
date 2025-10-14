@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -20,6 +21,8 @@ namespace UdonSharpLsp.Server.Handlers;
 
 public sealed class UdonSharpTextDocumentSyncHandler : TextDocumentSyncHandlerBase
 {
+    private static readonly Regex UdonSharpBehaviourPattern = new(@"\bclass\s+\w+\s*:\s*UdonSharpBehaviour\b", RegexOptions.Compiled);
+
     private readonly WorkspaceManager _workspaceManager;
     private readonly AnalysisService _analysisService;
     private readonly DiagnosticsPublisher _diagnosticsPublisher;
@@ -90,7 +93,24 @@ public sealed class UdonSharpTextDocumentSyncHandler : TextDocumentSyncHandlerBa
             return;
         }
 
+        var sourceText = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+        if (!IsUdonSharpBehaviourDocument(sourceText.ToString()))
+        {
+            await _diagnosticsPublisher.PublishAsync(documentUri, Array.Empty<Microsoft.CodeAnalysis.Diagnostic>(), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var diagnostics = await _analysisService.AnalyzeDocumentAsync(document, _settingsProvider.Current, cancellationToken).ConfigureAwait(false);
         await _diagnosticsPublisher.PublishAsync(documentUri, diagnostics, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsUdonSharpBehaviourDocument(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        return UdonSharpBehaviourPattern.IsMatch(content);
     }
 }

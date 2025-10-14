@@ -13,7 +13,9 @@ using UdonSharpLsp.Server.PolicyPacks;
 namespace UdonSharpLsp.Server.Handlers;
 
 [Method("udonsharp/rules/list")]
-public sealed class RuleListHandler : IJsonRpcRequestHandler<ListRulesRequest, RuleDescriptorDto[]>
+public sealed class RuleListHandler :
+    IJsonRpcRequestHandler<ListRulesRequest, RuleDescriptorDto[]>,
+    IRequestHandler<ListRulesRequest, RuleDescriptorDto[]>
 {
     private readonly PolicyRepository _policyRepository;
     private readonly SettingsProvider _settingsProvider;

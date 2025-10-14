@@ -8,7 +8,9 @@ using UdonSharpLsp.Server.PolicyPacks;
 namespace UdonSharpLsp.Server.Handlers;
 
 [Method("udonsharp/rules/documentation")]
-public sealed class RuleDocumentationHandler : IJsonRpcRequestHandler<RuleDocumentationRequest, RuleDocumentationResponse>
+public sealed class RuleDocumentationHandler :
+    IJsonRpcRequestHandler<RuleDocumentationRequest, RuleDocumentationResponse>,
+    IRequestHandler<RuleDocumentationRequest, RuleDocumentationResponse>
 {
     private readonly PolicyRepository _policyRepository;
 
