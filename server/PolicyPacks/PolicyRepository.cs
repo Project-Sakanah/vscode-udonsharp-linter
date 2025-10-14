@@ -26,11 +26,6 @@ public sealed class PolicyRepository
     {
         if (_rules.TryGetValue(id, out var rule))
         {
-            if (string.Equals(id, "USL007", StringComparison.OrdinalIgnoreCase) && settings.AllowRefOut)
-            {
-                return Microsoft.CodeAnalysis.DiagnosticSeverity.Hidden;
-            }
-
             return rule.GetSeverity(settings.Profile, settings.RuleOverrides);
         }
 

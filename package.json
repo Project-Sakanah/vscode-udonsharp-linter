@@ -52,7 +52,7 @@
         "udonsharpLinter.rules": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Overrides the severity for individual rules (e.g. { \\\"USL007\\\": \\\"off\\\" }). Values: error, warn, info, off.",
+          "markdownDescription": "Overrides the severity for individual rules (e.g. { \\\"RULE_ID\\\": \\\"off\\\" }). Values: error, warn, info, off.",
           "additionalProperties": {
             "type": "string",
             "enum": [
