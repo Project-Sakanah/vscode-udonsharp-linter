@@ -102,26 +102,35 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
         var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
         var methodSymbol = symbolInfo.Symbol as IMethodSymbol
             ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
-        if (methodSymbol is null)
+
+        var methodName = methodSymbol?.Name ?? GetInvocationMethodName(invocation.Expression);
+        if (!string.Equals(methodName, "Instantiate", StringComparison.Ordinal))
         {
             return;
         }
 
-        if (!string.Equals(methodSymbol.Name, "Instantiate", StringComparison.Ordinal))
+        if (!IsUnityObjectInvocation(methodSymbol, invocation))
         {
             return;
         }
 
-        var containingTypeName = methodSymbol.OriginalDefinition.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        if (!string.Equals(containingTypeName, "global::UnityEngine.Object", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (methodSymbol.IsGenericMethod && methodSymbol.TypeArguments.Length > 0)
+        if (methodSymbol?.IsGenericMethod == true && methodSymbol.TypeArguments.Length > 0)
         {
             var typeArgument = methodSymbol.TypeArguments[0];
             if (!IsGameObject(typeArgument))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0017,
+                    invocation.GetLocation()));
+            }
+
+            return;
+        }
+
+        if (methodSymbol is null &&
+            TryGetGenericTypeArgument(invocation.Expression, out var genericTypeName))
+        {
+            if (!IsGameObjectTypeName(genericTypeName))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UshRuleDescriptors.Ush0017,
@@ -137,6 +146,18 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
         }
 
         var argumentExpression = invocation.ArgumentList.Arguments[0].Expression;
+        if (methodSymbol is null)
+        {
+            if (argumentExpression is ObjectCreationExpressionSyntax objectCreation &&
+                !IsGameObjectTypeName(objectCreation.Type.ToString()))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0017,
+                    invocation.GetLocation()));
+            }
+            return;
+        }
+
         var argumentType = UshAnalyzerUtilities.GetExpressionType(context.SemanticModel, argumentExpression, context.CancellationToken);
         if (argumentType is null)
         {
@@ -184,6 +205,75 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             UshRuleDescriptors.Ush0021,
             context.Node.GetLocation()));
+    }
+
+    private static bool IsUnityObjectInvocation(IMethodSymbol? methodSymbol, InvocationExpressionSyntax invocation)
+    {
+        if (methodSymbol?.OriginalDefinition?.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is { } containing &&
+            string.Equals(containing, "global::UnityEngine.Object", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (invocation.Expression is MemberAccessExpressionSyntax memberAccess)
+        {
+            var qualifier = memberAccess.Expression.ToString().Trim();
+            if (string.Equals(qualifier, "UnityEngine.Object", StringComparison.Ordinal) ||
+                string.Equals(qualifier, "global::UnityEngine.Object", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetGenericTypeArgument(ExpressionSyntax expression, out string typeName)
+    {
+        switch (expression)
+        {
+            case GenericNameSyntax generic when generic.TypeArgumentList.Arguments.Count > 0:
+                typeName = generic.TypeArgumentList.Arguments[0].ToString();
+                return true;
+            case MemberAccessExpressionSyntax { Name: GenericNameSyntax generic } when generic.TypeArgumentList.Arguments.Count > 0:
+                typeName = generic.TypeArgumentList.Arguments[0].ToString();
+                return true;
+            case ConditionalAccessExpressionSyntax conditional:
+                return TryGetGenericTypeArgument(conditional.WhenNotNull, out typeName);
+            default:
+                typeName = string.Empty;
+                return false;
+        }
+    }
+
+    private static string? GetInvocationMethodName(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
+            GenericNameSyntax generic => generic.Identifier.Text,
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            MemberBindingExpressionSyntax memberBinding => memberBinding.Name.Identifier.Text,
+            ConditionalAccessExpressionSyntax conditional => GetInvocationMethodName(conditional.WhenNotNull),
+            _ => null,
+        };
+    }
+
+    private static bool IsGameObjectTypeName(string typeName)
+    {
+        var trimmed = typeName.Trim();
+        if (trimmed.Length == 0)
+        {
+            return false;
+        }
+
+        if (trimmed.StartsWith("global::", StringComparison.Ordinal))
+        {
+            trimmed = trimmed.Substring("global::".Length);
+        }
+
+        return string.Equals(trimmed, "UnityEngine.GameObject", StringComparison.Ordinal) ||
+               string.Equals(trimmed, "GameObject", StringComparison.Ordinal);
     }
 
     private static bool IsGameObject(ITypeSymbol? typeSymbol)

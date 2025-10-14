@@ -29,6 +29,11 @@ internal static class UshAnalyzerUtilities
                 return true;
             }
 
+            if (DeclaresUdonSharpBehaviour(type))
+            {
+                return true;
+            }
+
             type = type.BaseType;
         }
 
@@ -41,6 +46,41 @@ internal static class UshAnalyzerUtilities
         return declaration is null
             ? null
             : semanticModel.GetDeclaredSymbol(declaration, cancellationToken) as INamedTypeSymbol;
+    }
+
+    private static bool DeclaresUdonSharpBehaviour(INamedTypeSymbol type)
+    {
+        foreach (var syntaxReference in type.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not TypeDeclarationSyntax declaration || declaration.BaseList is null)
+            {
+                continue;
+            }
+
+            foreach (var baseType in declaration.BaseList.Types)
+            {
+                var baseName = GetSimpleTypeName(baseType.Type);
+                if (string.Equals(baseName, "UdonSharpBehaviour", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string GetSimpleTypeName(TypeSyntax typeSyntax)
+    {
+        return typeSyntax switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+            AliasQualifiedNameSyntax alias => alias.Name.Identifier.Text,
+            GenericNameSyntax generic => generic.Identifier.Text,
+            SimpleNameSyntax simple => simple.Identifier.Text,
+            _ => typeSyntax.ToString()
+        };
     }
 
     public static AttributeData? GetAttribute(

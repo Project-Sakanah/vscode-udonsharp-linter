@@ -48,20 +48,7 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
-        var methodSymbol = symbolInfo.Symbol as IMethodSymbol
-            ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
-
-        if (methodSymbol is null)
-        {
-            return;
-        }
-
-        var methodName = methodSymbol.Name;
-        var isCustomEvent = CustomEventMethodNames.Contains(methodName);
-        var isNetworkEvent = NetworkEventMethodNames.Contains(methodName);
-
-        if (!isCustomEvent && !isNetworkEvent)
+        if (!TryIdentifyEventInvocation(invocation, context.SemanticModel, context.CancellationToken, out var methodSymbol, out var methodName, out var isCustomEvent, out var isNetworkEvent))
         {
             return;
         }
@@ -269,6 +256,52 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    private static bool TryIdentifyEventInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken,
+        out IMethodSymbol? methodSymbol,
+        out string methodName,
+        out bool isCustomEvent,
+        out bool isNetworkEvent)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        methodSymbol = symbolInfo.Symbol as IMethodSymbol
+            ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+
+        if (methodSymbol is not null)
+        {
+            methodName = methodSymbol.Name;
+        }
+        else
+        {
+            methodName = GetMethodNameFromExpression(invocation.Expression) ?? string.Empty;
+        }
+
+        isCustomEvent = CustomEventMethodNames.Contains(methodName);
+        isNetworkEvent = NetworkEventMethodNames.Contains(methodName);
+        return isCustomEvent || isNetworkEvent;
+    }
+
+    private static string? GetMethodNameFromExpression(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess => GetSimpleName(memberAccess.Name),
+            MemberBindingExpressionSyntax memberBinding => GetSimpleName(memberBinding.Name),
+            ConditionalAccessExpressionSyntax conditional => GetMethodNameFromExpression(conditional.WhenNotNull),
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            GenericNameSyntax generic => generic.Identifier.Text,
+            SimpleNameSyntax simple => simple.Identifier.Text,
+            _ => null,
+        };
+    }
+
+    private static string? GetSimpleName(SimpleNameSyntax nameSyntax)
+    {
+        return nameSyntax.Identifier.Text;
+    }
+
     private static INamedTypeSymbol? ResolveBehaviourFromMemberAccess(
         MemberAccessExpressionSyntax memberAccess,
         SemanticModel semanticModel,
@@ -296,7 +329,7 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
 
     private static INamedTypeSymbol? ResolveTargetBehaviour(
         InvocationExpressionSyntax invocation,
-        IMethodSymbol symbol,
+        IMethodSymbol? symbol,
         SemanticModel semanticModel,
         CancellationToken cancellationToken)
     {
@@ -315,7 +348,7 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
             return containingType;
         }
 
-        return symbol.ContainingType as INamedTypeSymbol;
+        return symbol?.ContainingType as INamedTypeSymbol;
     }
 
     private sealed class MethodSymbolComparer : IEqualityComparer<IMethodSymbol>

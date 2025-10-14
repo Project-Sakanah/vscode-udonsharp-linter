@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -40,6 +41,14 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         "global::UnityEngine.Component.gameObject",
         "global::UnityEngine.GameObject.gameObject");
 
+    private static readonly ImmutableHashSet<string> ForbiddenMemberNamesNormalized = ForbiddenMemberNames
+        .Select(NormalizeQualifiedName)
+        .ToImmutableHashSet(StringComparer.Ordinal);
+
+    private static readonly ImmutableHashSet<string> ForbiddenTypeNamesNormalized = ForbiddenTypeNames
+        .Select(NormalizeQualifiedName)
+        .ToImmutableHashSet(StringComparer.Ordinal);
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => Supported;
 
     public override void Initialize(AnalysisContext context)
@@ -62,6 +71,26 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var methodSymbols = GetMethodCandidates(symbolInfo);
         if (methodSymbols.Length == 0)
         {
+            var syntaxMethodName = GetInvocationMethodName(invocation.Expression);
+            if (IsForbiddenGetComponentName(syntaxMethodName))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0013,
+                    invocation.GetLocation(),
+                    syntaxMethodName ?? "GetComponent"));
+                return;
+            }
+
+            var qualifiedExpression = GetQualifiedExpressionName(invocation.Expression);
+            if (MatchesForbiddenNamespace(qualifiedExpression))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0013,
+                    invocation.GetLocation(),
+                    syntaxMethodName ?? qualifiedExpression ?? invocation.ToString()));
+                return;
+            }
+
             return;
         }
 
@@ -94,6 +123,23 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var symbols = GetSymbolCandidates(symbolInfo);
         if (symbols.Length == 0)
         {
+            var memberText = GetQualifiedExpressionName(access);
+            if (IsForbiddenMemberName(memberText))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0014,
+                    access.Name.GetLocation(),
+                    access.Name.Identifier.Text));
+                return;
+            }
+
+            if (MatchesForbiddenNamespace(memberText))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0014,
+                    access.Name.GetLocation(),
+                    access.Name.Identifier.Text));
+            }
             return;
         }
 
@@ -105,7 +151,7 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
             }
 
             var memberName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (ForbiddenMemberNames.Contains(memberName))
+            if (IsForbiddenMemberName(memberName))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UshRuleDescriptors.Ush0014,
@@ -132,6 +178,7 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var typeSymbol = typeInfo.Type ?? typeInfo.ConvertedType;
         if (typeSymbol is null)
         {
+            ReportForbiddenTypeByText(context, declaration.Type.ToString(), declaration.Type.GetLocation());
             return;
         }
 
@@ -145,6 +192,7 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var typeSymbol = typeInfo.Type ?? typeInfo.ConvertedType;
         if (typeSymbol is null)
         {
+            ReportForbiddenTypeByText(context, declaration.Declaration.Type.ToString(), declaration.Declaration.Type.GetLocation());
             return;
         }
 
@@ -158,6 +206,7 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var typeSymbol = typeInfo.Type ?? typeInfo.ConvertedType;
         if (typeSymbol is null)
         {
+            ReportForbiddenTypeByText(context, declaration.Type.ToString(), declaration.Type.GetLocation());
             return;
         }
 
@@ -176,6 +225,7 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         var typeSymbol = typeInfo.Type ?? typeInfo.ConvertedType;
         if (typeSymbol is null)
         {
+            ReportForbiddenTypeByText(context, parameter.Type.ToString(), parameter.Type.GetLocation());
             return;
         }
 
@@ -222,6 +272,222 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
                 location,
                 typeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat)));
         }
+    }
+
+    private static void ReportForbiddenTypeByText(SyntaxNodeAnalysisContext context, string typeNameText, Location location)
+    {
+        foreach (var candidate in EnumerateTypeNameCandidates(typeNameText))
+        {
+            if (!MatchesForbiddenType(candidate))
+            {
+                continue;
+            }
+
+            var normalized = NormalizeQualifiedName(candidate);
+            context.ReportDiagnostic(Diagnostic.Create(
+                UshRuleDescriptors.Ush0015,
+                location,
+                string.IsNullOrEmpty(normalized) ? candidate : normalized));
+            break;
+        }
+    }
+
+    private static IEnumerable<string> EnumerateTypeNameCandidates(string typeNameText)
+    {
+        var trimmed = typeNameText?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            yield break;
+        }
+
+        if (trimmed.EndsWith("?", StringComparison.Ordinal))
+        {
+            trimmed = trimmed.Substring(0, trimmed.Length - 1).Trim();
+        }
+
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            yield break;
+        }
+
+        yield return trimmed;
+
+        var prefixes = new[]
+        {
+            "System.Nullable<",
+            "global::System.Nullable<"
+        };
+
+        foreach (var prefix in prefixes)
+        {
+            if (!trimmed.StartsWith(prefix, StringComparison.Ordinal) || !trimmed.EndsWith(">", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var inner = trimmed.Substring(prefix.Length, trimmed.Length - prefix.Length - 1).Trim();
+            if (!string.IsNullOrEmpty(inner))
+            {
+                yield return inner;
+            }
+        }
+    }
+
+    private static bool MatchesForbiddenType(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        var normalized = NormalizeQualifiedName(candidate);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return false;
+        }
+
+        if (ForbiddenTypeNamesNormalized.Contains(normalized))
+        {
+            return true;
+        }
+
+        var globalName = $"global::{normalized}";
+        if (ForbiddenTypeNames.Contains(globalName))
+        {
+            return true;
+        }
+
+        return MatchesForbiddenNamespace(normalized);
+    }
+
+    private static bool IsForbiddenMemberName(string? memberName)
+    {
+        if (string.IsNullOrWhiteSpace(memberName))
+        {
+            return false;
+        }
+
+        var normalized = NormalizeQualifiedName(memberName);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return false;
+        }
+
+        return ForbiddenMemberNamesNormalized.Contains(normalized);
+    }
+
+    private static bool IsForbiddenGetComponentName(string? methodName)
+    {
+        return string.Equals(methodName, "GetComponent", StringComparison.Ordinal) ||
+               string.Equals(methodName, "GetComponents", StringComparison.Ordinal);
+    }
+
+    private static string? GetInvocationMethodName(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess => GetSimpleName(memberAccess.Name),
+            MemberBindingExpressionSyntax memberBinding => GetSimpleName(memberBinding.Name),
+            ConditionalAccessExpressionSyntax conditional => GetInvocationMethodName(conditional.WhenNotNull),
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            GenericNameSyntax generic => generic.Identifier.Text,
+            SimpleNameSyntax simple => simple.Identifier.Text,
+            _ => null,
+        };
+    }
+
+    private static string? GetQualifiedExpressionName(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess => CombineQualified(
+                GetQualifiedExpressionName(memberAccess.Expression),
+                GetSimpleName(memberAccess.Name)),
+            ConditionalAccessExpressionSyntax conditional => GetQualifiedExpressionName(conditional.WhenNotNull),
+            MemberBindingExpressionSyntax memberBinding => GetSimpleName(memberBinding.Name),
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            GenericNameSyntax generic => generic.Identifier.Text,
+            SimpleNameSyntax simple => simple.Identifier.Text,
+            QualifiedNameSyntax qualified => CombineQualified(
+                GetQualifiedExpressionName(qualified.Left),
+                qualified.Right.Identifier.Text),
+            AliasQualifiedNameSyntax alias => alias.Name.Identifier.Text,
+            InvocationExpressionSyntax invocation => GetQualifiedExpressionName(invocation.Expression),
+            _ => expression.ToString().Trim()
+        };
+    }
+
+    private static string CombineQualified(string? left, string right)
+    {
+        if (string.IsNullOrEmpty(right))
+        {
+            return left ?? string.Empty;
+        }
+
+        if (string.IsNullOrEmpty(left))
+        {
+            return right;
+        }
+
+        return $"{left}.{right}";
+    }
+
+    private static string GetSimpleName(SimpleNameSyntax nameSyntax)
+    {
+        return nameSyntax.Identifier.Text;
+    }
+
+    private static string NormalizeQualifiedName(string? qualifiedName)
+    {
+        if (string.IsNullOrWhiteSpace(qualifiedName))
+        {
+            return string.Empty;
+        }
+
+        var normalized = qualifiedName.Trim();
+
+        if (normalized.StartsWith("global::", StringComparison.Ordinal))
+        {
+            normalized = normalized.Substring("global::".Length);
+        }
+
+        var aliasSeparator = normalized.IndexOf("::", StringComparison.Ordinal);
+        if (aliasSeparator >= 0)
+        {
+            normalized = normalized.Substring(aliasSeparator + 2);
+        }
+
+        var genericIndex = normalized.IndexOf('<');
+        if (genericIndex >= 0)
+        {
+            normalized = normalized.Substring(0, genericIndex);
+        }
+
+        while (normalized.EndsWith("[]", StringComparison.Ordinal))
+        {
+            normalized = normalized.Substring(0, normalized.Length - 2);
+        }
+
+        return normalized;
+    }
+
+    private static bool MatchesForbiddenNamespace(string? qualifiedName)
+    {
+        var normalized = NormalizeQualifiedName(qualifiedName);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return false;
+        }
+
+        foreach (var prefix in ForbiddenNamespacePrefixes)
+        {
+            if (normalized.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsForbiddenNamespace(INamespaceSymbol? namespaceSymbol)
