@@ -20,7 +20,10 @@ var server = await LanguageServer.From(options =>
         .ConfigureLogging(logging =>
         {
             logging.ClearProviders();
-            logging.AddConsole();
+            logging.AddConsole(options =>
+            {
+                options.LogToStandardErrorThreshold = LogLevel.Trace;
+            });
             logging.SetMinimumLevel(LogLevel.Information);
         })
         .WithServices(services =>
