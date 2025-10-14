@@ -35,22 +35,21 @@ public sealed class UshFieldChangeCallbackAnalyzer : DiagnosticAnalyzer
         }
 
         var seenTargets = new Dictionary<string, IFieldSymbol>(StringComparer.Ordinal);
-        var fields = type.GetMembers().OfType<IFieldSymbol>();
 
-        foreach (var field in fields)
+        foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
         {
-            var attribute = UshAnalyzerUtilities.GetAttribute(field, "FieldChangeCallback");
+            var attribute = UshAnalyzerUtilities.GetFieldChangeCallbackAttribute(field, context.CancellationToken);
             if (attribute is null)
             {
                 continue;
             }
 
-            if (!TryGetCallbackTarget(context, field, attribute, out var targetName, out var attributeSyntax))
+            if (!TryGetCallbackTarget(context, attribute, out var targetName, out var attributeSyntax))
             {
                 continue;
             }
 
-            if (seenTargets.TryGetValue(targetName, out var previousField))
+            if (seenTargets.ContainsKey(targetName))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UshRuleDescriptors.Ush0040,
@@ -75,22 +74,19 @@ public sealed class UshFieldChangeCallbackAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            var fieldType = field.Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-            var propertyType = propertySymbol.Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-            if (!string.Equals(fieldType, propertyType, StringComparison.Ordinal))
+            if (!SymbolEqualityComparer.Default.Equals(field.Type, propertySymbol.Type))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UshRuleDescriptors.Ush0042,
                     attributeSyntax.GetLocation(),
                     targetName,
-                    fieldType));
+                    field.Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat)));
             }
         }
     }
 
     private static bool TryGetCallbackTarget(
         SymbolAnalysisContext context,
-        IFieldSymbol field,
         AttributeData attribute,
         out string targetName,
         out AttributeSyntax attributeSyntax)
@@ -102,18 +98,7 @@ public sealed class UshFieldChangeCallbackAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        if (attribute.ConstructorArguments.Length == 0)
-        {
-            return false;
-        }
-
-        var value = attribute.ConstructorArguments[0].Value;
-        if (value is string text && !string.IsNullOrEmpty(text))
-        {
-            targetName = text;
-            return true;
-        }
-
-        return false;
+        var semanticModel = context.Compilation.GetSemanticModel(attributeSyntax.SyntaxTree);
+        return UshAnalyzerUtilities.TryGetAttributeStringArgument(attribute, attributeSyntax, semanticModel, context.CancellationToken, out targetName);
     }
 }

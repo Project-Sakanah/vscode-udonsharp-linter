@@ -90,30 +90,29 @@ public sealed class UshSynchronizationAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            var syncedAttribute = UshAnalyzerUtilities.GetAttribute(fieldSymbol, "UdonSynced");
+            var syncedAttribute = UshAnalyzerUtilities.GetUdonSyncedAttribute(fieldSymbol, context.CancellationToken);
             if (syncedAttribute is null)
             {
                 continue;
             }
 
-            AnalyzeSyncedField(context, fieldDeclaration, variable, fieldSymbol, containingType, syncedAttribute);
+            AnalyzeSyncedField(context, variable, fieldSymbol, containingType, syncedAttribute);
         }
     }
 
     private static void AnalyzeSyncedField(
         SyntaxNodeAnalysisContext context,
-        FieldDeclarationSyntax declaration,
         VariableDeclaratorSyntax variable,
         IFieldSymbol fieldSymbol,
         INamedTypeSymbol behaviour,
         AttributeData syncedAttribute)
     {
         var fieldName = fieldSymbol.Name;
-        var syncMode = GetSyncMode(syncedAttribute);
-        var behaviourSyncMode = UshAnalyzerUtilities.GetBehaviourSyncMode(behaviour);
+        var syncMode = UshAnalyzerUtilities.GetUdonSyncModeName(syncedAttribute, context.SemanticModel, context.CancellationToken) ?? "None";
+        var behaviourSyncMode = UshAnalyzerUtilities.GetBehaviourSyncModeName(behaviour, context.SemanticModel, context.CancellationToken) ?? "Any";
         var fieldTypeName = GetTypeName(fieldSymbol.Type);
 
-        if (string.Equals(behaviourSyncMode, "BehaviourSyncMode.NoVariableSync", StringComparison.Ordinal))
+        if (string.Equals(behaviourSyncMode, "NoVariableSync", StringComparison.Ordinal))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 UshRuleDescriptors.Ush0007,
@@ -130,7 +129,7 @@ public sealed class UshSynchronizationAnalyzer : DiagnosticAnalyzer
                 fieldTypeName));
         }
 
-        if (fieldSymbol.Type is IArrayTypeSymbol && !string.Equals(behaviourSyncMode, "BehaviourSyncMode.Manual", StringComparison.Ordinal))
+        if (fieldSymbol.Type is IArrayTypeSymbol && !string.Equals(behaviourSyncMode, "Manual", StringComparison.Ordinal))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 UshRuleDescriptors.Ush0009,
@@ -138,9 +137,9 @@ public sealed class UshSynchronizationAnalyzer : DiagnosticAnalyzer
                 fieldName));
         }
 
-        if (string.Equals(behaviourSyncMode, "BehaviourSyncMode.Manual", StringComparison.Ordinal) &&
-            (string.Equals(syncMode, "UdonSyncMode.Linear", StringComparison.Ordinal) ||
-             string.Equals(syncMode, "UdonSyncMode.Smooth", StringComparison.Ordinal)))
+        if (string.Equals(behaviourSyncMode, "Manual", StringComparison.Ordinal) &&
+            (string.Equals(syncMode, "Linear", StringComparison.Ordinal) ||
+             string.Equals(syncMode, "Smooth", StringComparison.Ordinal)))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 UshRuleDescriptors.Ush0010,
@@ -149,7 +148,7 @@ public sealed class UshSynchronizationAnalyzer : DiagnosticAnalyzer
                 fieldName));
         }
 
-        if (string.Equals(syncMode, "UdonSyncMode.Linear", StringComparison.Ordinal) &&
+        if (string.Equals(syncMode, "Linear", StringComparison.Ordinal) &&
             !IsSupportedLinearType(fieldSymbol.Type))
         {
             context.ReportDiagnostic(Diagnostic.Create(
@@ -158,7 +157,7 @@ public sealed class UshSynchronizationAnalyzer : DiagnosticAnalyzer
                 fieldTypeName));
         }
 
-        if (string.Equals(syncMode, "UdonSyncMode.Smooth", StringComparison.Ordinal) &&
+        if (string.Equals(syncMode, "Smooth", StringComparison.Ordinal) &&
             !IsSupportedSmoothType(fieldSymbol.Type))
         {
             context.ReportDiagnostic(Diagnostic.Create(
@@ -207,27 +206,5 @@ public sealed class UshSynchronizationAnalyzer : DiagnosticAnalyzer
     private static string GetTypeName(ITypeSymbol type)
     {
         return type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-    }
-
-    private static string GetSyncMode(AttributeData attribute)
-    {
-        if (attribute.ConstructorArguments.Length > 0)
-        {
-            var value = attribute.ConstructorArguments[0].Value?.ToString();
-            if (!string.IsNullOrEmpty(value))
-            {
-                return value!;
-            }
-        }
-
-        foreach (var named in attribute.NamedArguments)
-        {
-            if (string.Equals(named.Key, "SyncMode", StringComparison.Ordinal) && named.Value.Value is object value)
-            {
-                return value.ToString() ?? string.Empty;
-            }
-        }
-
-        return string.Empty;
     }
 }

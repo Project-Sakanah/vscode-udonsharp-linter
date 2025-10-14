@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -98,15 +99,35 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        var symbol = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol as IMethodSymbol;
-        if (symbol is null)
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+        var methodSymbol = symbolInfo.Symbol as IMethodSymbol
+            ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+        if (methodSymbol is null)
         {
             return;
         }
 
-        if (!string.Equals(symbol.Name, "Instantiate", StringComparison.Ordinal) ||
-            !string.Equals(symbol.ContainingType?.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat), "UnityEngine.Object", StringComparison.Ordinal))
+        if (!string.Equals(methodSymbol.Name, "Instantiate", StringComparison.Ordinal))
         {
+            return;
+        }
+
+        var containingTypeName = methodSymbol.OriginalDefinition.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (!string.Equals(containingTypeName, "global::UnityEngine.Object", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (methodSymbol.IsGenericMethod && methodSymbol.TypeArguments.Length > 0)
+        {
+            var typeArgument = methodSymbol.TypeArguments[0];
+            if (!IsGameObject(typeArgument))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0017,
+                    invocation.GetLocation()));
+            }
+
             return;
         }
 
@@ -115,14 +136,14 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var argumentType = context.SemanticModel.GetTypeInfo(invocation.ArgumentList.Arguments[0].Expression, context.CancellationToken).Type;
+        var argumentExpression = invocation.ArgumentList.Arguments[0].Expression;
+        var argumentType = UshAnalyzerUtilities.GetExpressionType(context.SemanticModel, argumentExpression, context.CancellationToken);
         if (argumentType is null)
         {
             return;
         }
 
-        var typeName = argumentType.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-        if (!string.Equals(typeName, "UnityEngine.GameObject", StringComparison.Ordinal))
+        if (!IsGameObject(argumentType))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 UshRuleDescriptors.Ush0017,
@@ -163,5 +184,23 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             UshRuleDescriptors.Ush0021,
             context.Node.GetLocation()));
+    }
+
+    private static bool IsGameObject(ITypeSymbol? typeSymbol)
+    {
+        if (typeSymbol is null)
+        {
+            return false;
+        }
+
+        if (typeSymbol is IArrayTypeSymbol array)
+        {
+            return IsGameObject(array.ElementType);
+        }
+
+        return string.Equals(
+            typeSymbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
+            "UnityEngine.GameObject",
+            StringComparison.Ordinal);
     }
 }
