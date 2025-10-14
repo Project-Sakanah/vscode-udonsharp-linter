@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CloseAction, ErrorAction, ErrorHandler, LanguageClient, State } from 'vscode-languageclient/node';
+import { CloseAction, ErrorAction, ErrorHandler, LanguageClient } from 'vscode-languageclient/node';
 import { SettingsManager } from '../config/settings';
 import { createLanguageClient } from './bootstrap';
 import { RuleRepository } from './ruleRepository';
@@ -13,6 +13,7 @@ export class LanguageClientController implements vscode.Disposable {
 	private client: LanguageClient | undefined;
 	private disposed = false;
 	private restartAttempts = 0;
+	private restartPending = false;
 	private statusInterval: NodeJS.Timeout | undefined;
 	private readonly settingsListener: vscode.Disposable;
 
@@ -51,21 +52,20 @@ export class LanguageClientController implements vscode.Disposable {
 		);
 		this.client = client;
 
-		this.restartAttempts = 0;
-
 		this.statusInterval = setInterval(() => {
 			void this.requestServerStatus();
 		}, STATUS_REFRESH_INTERVAL);
 
-		client.onDidChangeState((event: { newState: State }) => {
-			if (event.newState === State.Stopped) {
-				this.scheduleRestart();
-			}
-		});
-
-		await client.start();
-		await this.ruleRepository.initialise();
-		await this.requestServerStatus();
+		try {
+			await client.start();
+			this.restartAttempts = 0;
+			await this.ruleRepository.initialise();
+			await this.requestServerStatus();
+		} catch (error) {
+			this.clearStatusInterval();
+			this.client = undefined;
+			throw error;
+		}
 	}
 
 	public get languageClient(): LanguageClient | undefined {
@@ -117,6 +117,10 @@ export class LanguageClientController implements vscode.Disposable {
 			return;
 		}
 
+		if (this.restartPending) {
+			return;
+		}
+
 		if (this.restartAttempts >= MAX_RESTART_ATTEMPTS) {
 			void vscode.window.showErrorMessage(
 				vscode.l10n.t('The UdonSharp Linter server cannot be restarted. Reload the extension or restart VSCode.')
@@ -124,16 +128,30 @@ export class LanguageClientController implements vscode.Disposable {
 			return;
 		}
 
+		this.restartPending = true;
 		this.restartAttempts += 1;
 		const delay = Math.pow(2, this.restartAttempts - 1) * 1_000;
 		setTimeout(() => {
-			if (this.client) {
-				void this.stop();
-			}
-			this.client = undefined;
-			if (!this.disposed) {
-				void this.start();
-			}
+			void (async () => {
+				this.restartPending = false;
+
+				if (this.client) {
+					await this.stop();
+				}
+
+				this.client = undefined;
+
+				if (this.disposed) {
+					return;
+				}
+
+				try {
+					await this.start();
+				} catch (error) {
+					console.error('UdonSharp Linter server restart failed:', error);
+					this.scheduleRestart();
+				}
+			})();
 		}, delay);
 	}
 

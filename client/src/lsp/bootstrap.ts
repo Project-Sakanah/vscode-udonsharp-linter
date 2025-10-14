@@ -85,7 +85,7 @@ function createDefaultErrorHandler(): ErrorHandler {
 			return { action: ErrorAction.Continue };
 		},
 		closed() {
-			return { action: CloseAction.Restart };
+			return { action: CloseAction.DoNotRestart };
 		},
 	};
 }
