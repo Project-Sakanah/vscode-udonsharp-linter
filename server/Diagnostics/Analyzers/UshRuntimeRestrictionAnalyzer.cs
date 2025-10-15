@@ -109,9 +109,24 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (!IsUnityObjectInvocation(methodSymbol, invocation))
+        var isUnityInstantiate = IsUnityObjectInvocation(methodSymbol, invocation);
+        if (!isUnityInstantiate)
         {
-            return;
+            if (methodSymbol is null &&
+                invocation.Expression is IdentifierNameSyntax identifier &&
+                string.Equals(identifier.Identifier.Text, "Instantiate", StringComparison.Ordinal))
+            {
+                var containingType = UshAnalyzerUtilities.GetContainingType(invocation, context.SemanticModel, context.CancellationToken);
+                if (containingType is INamedTypeSymbol namedType && UshAnalyzerUtilities.IsUdonSharpBehaviour(namedType))
+                {
+                    isUnityInstantiate = true;
+                }
+            }
+
+            if (!isUnityInstantiate)
+            {
+                return;
+            }
         }
 
         if (methodSymbol?.IsGenericMethod == true && methodSymbol.TypeArguments.Length > 0)
@@ -155,6 +170,7 @@ public sealed class UshRuntimeRestrictionAnalyzer : DiagnosticAnalyzer
                     UshRuleDescriptors.Ush0017,
                     invocation.GetLocation()));
             }
+
             return;
         }
 

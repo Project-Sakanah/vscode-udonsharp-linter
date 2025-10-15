@@ -68,17 +68,37 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
         var eventArgument = arguments[eventArgumentIndex];
         if (!UshAnalyzerUtilities.TryResolveEventTarget(context.SemanticModel, eventArgument.Expression, context.CancellationToken, out var targetName, out var resolvedMethodSymbol))
         {
+            if (UshAnalyzerUtilities.IsStringLiteral(eventArgument.Expression))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0043,
+                    eventArgument.GetLocation(),
+                    eventArgument.Expression.ToString().Trim('"')));
+            }
+
+            var fallbackMethodName = ExtractMethodNameFromTarget(context, eventArgument.Expression);
+            if (TryAnalyzeEventsSyntaxOnly(context, invocation, eventArgument, fallbackMethodName ?? string.Empty, isNetworkEvent))
+            {
+                return;
+            }
+
             return;
         }
 
         var targetBehaviour = DetermineTargetBehaviour(invocation, methodSymbol, resolvedMethodSymbol, context.SemanticModel, context.CancellationToken);
-        if (targetBehaviour is null)
+        if (targetBehaviour is null || !UshAnalyzerUtilities.IsUdonSharpBehaviour(targetBehaviour))
         {
-            return;
-        }
+            if (TryAnalyzeEventsSyntaxOnly(context, invocation, eventArgument, targetName, isNetworkEvent))
+            {
+                if (UshAnalyzerUtilities.IsStringLiteral(eventArgument.Expression))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UshRuleDescriptors.Ush0043,
+                        eventArgument.GetLocation(),
+                        targetName));
+                }
+            }
 
-        if (!UshAnalyzerUtilities.IsUdonSharpBehaviour(targetBehaviour))
-        {
             return;
         }
 
@@ -120,6 +140,343 @@ public sealed class UshNetworkEventAnalyzer : DiagnosticAnalyzer
                 eventArgument.GetLocation(),
                 targetName));
         }
+    }
+
+    private readonly struct SyntaxMethodCandidate
+    {
+        public SyntaxMethodCandidate(string name, bool isPublic, bool hasNetworkCallable, ImmutableArray<string> parameterTypes)
+        {
+            Name = name;
+            IsPublic = isPublic;
+            HasNetworkCallable = hasNetworkCallable;
+            ParameterTypes = parameterTypes;
+        }
+
+        public string Name { get; }
+        public bool IsPublic { get; }
+        public bool HasNetworkCallable { get; }
+        public ImmutableArray<string> ParameterTypes { get; }
+    }
+
+    private static bool TryAnalyzeEventsSyntaxOnly(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation,
+        ArgumentSyntax eventArgument,
+        string methodName,
+        bool isNetworkEvent)
+    {
+        if (string.IsNullOrEmpty(methodName))
+        {
+            return false;
+        }
+
+        var targetType = TryExtractDeclaringTypeFromNameof(eventArgument.Expression) is { } typeFromNameof
+            ? UshAnalyzerUtilities.FindTypeDeclarationInSameDocument(invocation, typeFromNameof)
+            : null;
+
+        if (targetType is null && invocation.Expression is MemberAccessExpressionSyntax memberAccess)
+        {
+            var leftMostIdentifier = GetLeftMostIdentifier(memberAccess.Expression);
+            if (!string.IsNullOrEmpty(leftMostIdentifier))
+            {
+                var typeName = UshAnalyzerUtilities.FindTypeNameOfIdentifierInSameDocument(invocation, leftMostIdentifier);
+                if (!string.IsNullOrWhiteSpace(typeName))
+                {
+                    var simple = ExtractSimpleTypeName(typeName!);
+                    targetType = UshAnalyzerUtilities.FindTypeDeclarationInSameDocument(invocation, simple);
+                }
+            }
+        }
+
+        targetType ??= invocation.FirstAncestorOrSelf<TypeDeclarationSyntax>();
+        if (targetType is null)
+        {
+            return false;
+        }
+
+        var candidates = FindCandidateMethodsBySyntax(targetType, methodName).ToImmutableArray();
+
+        if (candidates.IsDefaultOrEmpty)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                UshRuleDescriptors.Ush0001,
+                eventArgument.GetLocation(),
+                methodName));
+        }
+        else if (!candidates.Any(candidate => candidate.IsPublic))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                UshRuleDescriptors.Ush0002,
+                eventArgument.GetLocation(),
+                methodName));
+        }
+
+        if (isNetworkEvent)
+        {
+            ValidateNetworkNaming(context, eventArgument, methodName);
+
+            var argumentCount = invocation.ArgumentList.Arguments.Count;
+            if (argumentCount > 2 && !candidates.Any(candidate => candidate.HasNetworkCallable))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0004,
+                    eventArgument.GetLocation(),
+                    methodName));
+            }
+
+            if (argumentCount > 2)
+            {
+                var payloadCount = argumentCount - 2;
+                var matching = candidates.Where(candidate => candidate.ParameterTypes.Length == payloadCount).ToImmutableArray();
+                if (matching.IsDefaultOrEmpty)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UshRuleDescriptors.Ush0005,
+                        invocation.GetLocation(),
+                        0,
+                        methodName));
+                }
+                else
+                {
+                    var anyCompatible = matching.Any(candidate => PayloadMatchesTypesSyntaxOnly(invocation, candidate.ParameterTypes));
+                    if (!anyCompatible)
+                    {
+                        for (var index = 0; index < payloadCount; index++)
+                        {
+                            var argumentExpression = invocation.ArgumentList.Arguments[index + 2].Expression;
+                            var argumentType = ClassifyArgumentTypeName(argumentExpression);
+                            if (argumentType is null)
+                            {
+                                break;
+                            }
+
+                            var expected = matching[0].ParameterTypes[index];
+                            if (!TypeNamesCompatibleNormalized(expected, argumentType))
+                            {
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    UshRuleDescriptors.Ush0005,
+                                    argumentExpression.GetLocation(),
+                                    index + 1,
+                                    methodName));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            var syncMode = UshAnalyzerUtilities.GetBehaviourSyncModeNameFromSyntax(targetType);
+            if (string.Equals(syncMode, "None", StringComparison.Ordinal))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UshRuleDescriptors.Ush0006,
+                    invocation.GetLocation(),
+                    targetType.Identifier.Text));
+            }
+        }
+
+        return true;
+    }
+
+    private static IEnumerable<SyntaxMethodCandidate> FindCandidateMethodsBySyntax(TypeDeclarationSyntax typeDeclaration, string methodName)
+    {
+        foreach (var method in typeDeclaration.Members.OfType<MethodDeclarationSyntax>())
+        {
+            if (!string.Equals(method.Identifier.Text, methodName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var isPublic = method.Modifiers.Any(SyntaxKind.PublicKeyword);
+            var hasNetworkCallable = UshAnalyzerUtilities.HasAttributeSyntax(method.AttributeLists, "NetworkCallable");
+            var parameterTypes = (method.ParameterList?.Parameters ?? default)
+                .Select(parameter => parameter.Type?.ToString().Trim() ?? string.Empty)
+                .ToImmutableArray();
+
+            yield return new SyntaxMethodCandidate(methodName, isPublic, hasNetworkCallable, parameterTypes);
+        }
+    }
+
+    private static bool PayloadMatchesTypesSyntaxOnly(InvocationExpressionSyntax invocation, ImmutableArray<string> parameterTypes)
+    {
+        for (var index = 0; index < parameterTypes.Length; index++)
+        {
+            var argumentExpression = invocation.ArgumentList.Arguments[index + 2].Expression;
+            var argumentType = ClassifyArgumentTypeName(argumentExpression);
+            if (argumentType is null)
+            {
+                return true;
+            }
+
+            if (!TypeNamesCompatibleNormalized(parameterTypes[index], argumentType))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string ExtractSimpleTypeName(string qualifiedName)
+    {
+        var text = qualifiedName.Trim();
+        if (text.StartsWith("global::", StringComparison.Ordinal))
+        {
+            text = text.Substring("global::".Length);
+        }
+
+        var separatorIndex = text.LastIndexOf('.');
+        return separatorIndex >= 0 ? text.Substring(separatorIndex + 1) : text;
+    }
+
+    private static string? ClassifyArgumentTypeName(ExpressionSyntax expression)
+    {
+        switch (expression)
+        {
+            case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression):
+                return "string";
+            case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.CharacterLiteralExpression):
+                return "char";
+            case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.NullLiteralExpression):
+                return "null";
+            case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.NumericLiteralExpression):
+                return ClassifyNumericLiteral(literal.Token.Text);
+            case CastExpressionSyntax cast when cast.Type is { } typeSyntax:
+                return typeSyntax.ToString().Trim();
+            case ObjectCreationExpressionSyntax creation:
+                return creation.Type.ToString().Trim();
+        }
+
+        return null;
+    }
+
+    private static string ClassifyNumericLiteral(string token)
+    {
+        if (token.EndsWith("f", StringComparison.OrdinalIgnoreCase))
+        {
+            return "float";
+        }
+
+        if (token.EndsWith("d", StringComparison.OrdinalIgnoreCase))
+        {
+            return "double";
+        }
+
+        if (token.EndsWith("m", StringComparison.OrdinalIgnoreCase))
+        {
+            return "decimal";
+        }
+
+        if (token.EndsWith("ul", StringComparison.OrdinalIgnoreCase) || token.EndsWith("lu", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ulong";
+        }
+
+        if (token.EndsWith("u", StringComparison.OrdinalIgnoreCase))
+        {
+            return "uint";
+        }
+
+        if (token.EndsWith("l", StringComparison.OrdinalIgnoreCase))
+        {
+            return "long";
+        }
+
+        return "int";
+    }
+
+    private static bool TypeNamesCompatibleNormalized(string parameterType, string argumentType)
+    {
+        static string Normalize(string text)
+        {
+            var trimmed = text.Trim();
+            if (trimmed.StartsWith("global::", StringComparison.Ordinal))
+            {
+                trimmed = trimmed.Substring("global::".Length);
+            }
+
+            return trimmed switch
+            {
+                "System.Int32" => "int",
+                "System.Int64" => "long",
+                "System.UInt32" => "uint",
+                "System.UInt64" => "ulong",
+                "System.Single" => "float",
+                "System.Double" => "double",
+                "System.Decimal" => "decimal",
+                "System.String" => "string",
+                _ => trimmed
+            };
+        }
+
+        var normalizedParameter = Normalize(parameterType);
+        var normalizedArgument = Normalize(argumentType);
+
+        if (normalizedArgument == "null")
+        {
+            return true;
+        }
+
+        if (IsNumericAlias(normalizedParameter) && IsNumericAlias(normalizedArgument))
+        {
+            return true;
+        }
+
+        return string.Equals(normalizedParameter, normalizedArgument, StringComparison.Ordinal);
+    }
+
+    private static bool IsNumericAlias(string value)
+    {
+        return value is "sbyte" or "byte" or "short" or "ushort" or "int" or "uint" or "long" or "ulong" or "float" or "double" or "decimal";
+    }
+
+    private static string? GetLeftMostIdentifier(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case IdentifierNameSyntax identifier:
+                    return identifier.Identifier.Text;
+                case MemberAccessExpressionSyntax memberAccess:
+                    expression = memberAccess.Expression;
+                    continue;
+                case ConditionalAccessExpressionSyntax conditional:
+                    expression = conditional.WhenNotNull;
+                    continue;
+                default:
+                    return null;
+            }
+        }
+    }
+
+    private static string? ExtractMethodNameFromTarget(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
+    {
+        if (UshAnalyzerUtilities.TryResolveConstantString(context.SemanticModel, expression, context.CancellationToken, out var value) &&
+            !string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        return null;
+    }
+
+    private static string? TryExtractDeclaringTypeFromNameof(ExpressionSyntax expression)
+    {
+        if (expression is InvocationExpressionSyntax invocation &&
+            invocation.Expression is IdentifierNameSyntax identifier &&
+            string.Equals(identifier.Identifier.Text, "nameof", StringComparison.Ordinal) &&
+            invocation.ArgumentList.Arguments.Count == 1)
+        {
+            var argumentExpression = invocation.ArgumentList.Arguments[0].Expression;
+            if (argumentExpression is MemberAccessExpressionSyntax memberAccess)
+            {
+                var left = memberAccess.Expression;
+                return ExtractSimpleTypeName(left.ToString());
+            }
+        }
+
+        return null;
     }
 
     private static void ValidateTargetExistence(

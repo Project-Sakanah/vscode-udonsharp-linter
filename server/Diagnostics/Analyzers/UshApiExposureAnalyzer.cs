@@ -91,6 +91,22 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
+            var simpleName = GetSimpleNameFromExpression(invocation.Expression);
+            if (string.Equals(simpleName, "GetComponent", StringComparison.Ordinal) ||
+                string.Equals(simpleName, "GetComponents", StringComparison.Ordinal))
+            {
+                var containingType = UshAnalyzerUtilities.GetContainingType(invocation, context.SemanticModel, context.CancellationToken);
+                var inUdonSharp = containingType is INamedTypeSymbol typeSymbol && UshAnalyzerUtilities.IsUdonSharpBehaviour(typeSymbol);
+                if (inUdonSharp || HasUsingUnityEngine(invocation.SyntaxTree))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UshRuleDescriptors.Ush0013,
+                        invocation.GetLocation(),
+                        simpleName));
+                    return;
+                }
+            }
+
             return;
         }
 
@@ -506,5 +522,38 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
         }
 
         return symbolInfo.CandidateSymbols;
+    }
+
+    private static string? GetSimpleNameFromExpression(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier.Text,
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            GenericNameSyntax generic => generic.Identifier.Text,
+            MemberBindingExpressionSyntax binding => binding.Name.Identifier.Text,
+            ConditionalAccessExpressionSyntax conditional => GetSimpleNameFromExpression(conditional.WhenNotNull),
+            _ => null
+        };
+    }
+
+    private static bool HasUsingUnityEngine(SyntaxTree tree)
+    {
+        if (tree.GetRoot() is not CompilationUnitSyntax compilationUnit)
+        {
+            return false;
+        }
+
+        foreach (var usingDirective in compilationUnit.Usings)
+        {
+            var name = usingDirective.Name.ToString().Trim();
+            if (string.Equals(name, "UnityEngine", StringComparison.Ordinal) ||
+                name.EndsWith(".UnityEngine", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -509,4 +509,149 @@ internal static class UshAnalyzerUtilities
         var typeInfo = model.GetTypeInfo(expression, cancellationToken);
         return typeInfo.Type ?? typeInfo.ConvertedType;
     }
+
+    // ---------------------------------------------------------------------
+    // Syntax-only fallback helpers (no external API symbols required)
+    // ---------------------------------------------------------------------
+
+    public static TypeDeclarationSyntax? FindTypeDeclarationInSameDocument(SyntaxNode contextNode, string simpleTypeName)
+    {
+        var root = contextNode.SyntaxTree.GetRoot();
+        foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
+        {
+            if (string.Equals(type.Identifier.Text, simpleTypeName, StringComparison.Ordinal))
+            {
+                return type;
+            }
+        }
+
+        return null;
+    }
+
+    public static string? FindTypeNameOfIdentifierInSameDocument(SyntaxNode contextNode, string identifier)
+    {
+        var method = contextNode.FirstAncestorOrSelf<MethodDeclarationSyntax>();
+        if (method?.ParameterList is { } plist)
+        {
+            foreach (var parameter in plist.Parameters)
+            {
+                if (string.Equals(parameter.Identifier.Text, identifier, StringComparison.Ordinal))
+                {
+                    return parameter.Type?.ToString().Trim();
+                }
+            }
+        }
+
+        var searchRoot = (SyntaxNode?)method ?? contextNode.SyntaxTree.GetRoot();
+
+        foreach (var forEach in searchRoot.DescendantNodes().OfType<ForEachStatementSyntax>())
+        {
+            if (string.Equals(forEach.Identifier.Text, identifier, StringComparison.Ordinal))
+            {
+                return forEach.Type.ToString().Trim();
+            }
+        }
+
+        foreach (var declarationPattern in searchRoot.DescendantNodes().OfType<DeclarationPatternSyntax>())
+        {
+            if (declarationPattern.Designation is SingleVariableDesignationSyntax designation &&
+                string.Equals(designation.Identifier.Text, identifier, StringComparison.Ordinal))
+            {
+                return declarationPattern.Type.ToString().Trim();
+            }
+        }
+
+        foreach (var field in searchRoot.DescendantNodes().OfType<FieldDeclarationSyntax>())
+        {
+            foreach (var variable in field.Declaration.Variables)
+            {
+                if (string.Equals(variable.Identifier.Text, identifier, StringComparison.Ordinal))
+                {
+                    return field.Declaration.Type.ToString().Trim();
+                }
+            }
+        }
+
+        foreach (var property in searchRoot.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+        {
+            if (string.Equals(property.Identifier.Text, identifier, StringComparison.Ordinal))
+            {
+                return property.Type.ToString().Trim();
+            }
+        }
+
+        foreach (var local in searchRoot.DescendantNodes().OfType<LocalDeclarationStatementSyntax>())
+        {
+            if (local.Declaration is { } declaration)
+            {
+                foreach (var variable in declaration.Variables)
+                {
+                    if (string.Equals(variable.Identifier.Text, identifier, StringComparison.Ordinal))
+                    {
+                        return declaration.Type?.ToString().Trim();
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static bool HasAttributeSyntax(SyntaxList<AttributeListSyntax> attributes, string simpleName)
+    {
+        foreach (var list in attributes)
+        {
+            foreach (var attribute in list.Attributes)
+            {
+                var name = GetSimpleName(attribute.Name);
+                if (string.Equals(name, simpleName, StringComparison.Ordinal) ||
+                    string.Equals(name, $"{simpleName}Attribute", StringComparison.Ordinal) ||
+                    (name?.EndsWith("." + simpleName, StringComparison.Ordinal) ?? false) ||
+                    (name?.EndsWith("." + simpleName + "Attribute", StringComparison.Ordinal) ?? false))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static string? GetBehaviourSyncModeNameFromSyntax(TypeDeclarationSyntax typeDeclaration)
+    {
+        foreach (var attributeList in typeDeclaration.AttributeLists)
+        {
+            foreach (var attribute in attributeList.Attributes)
+            {
+                var name = GetSimpleName(attribute.Name);
+                if (string.Equals(name, "UdonBehaviourSyncMode", StringComparison.Ordinal) ||
+                    string.Equals(name, "UdonBehaviourSyncModeAttribute", StringComparison.Ordinal) ||
+                    (name?.EndsWith(".UdonBehaviourSyncMode", StringComparison.Ordinal) ?? false) ||
+                    (name?.EndsWith(".UdonBehaviourSyncModeAttribute", StringComparison.Ordinal) ?? false))
+                {
+                    if (attribute.ArgumentList is { Arguments.Count: > 0 })
+                    {
+                        var modeArgument = attribute.ArgumentList.Arguments
+                            .FirstOrDefault(argument => argument.NameEquals?.Name.Identifier.Text == "Mode")
+                            ?? attribute.ArgumentList.Arguments[0];
+                        var expression = modeArgument.Expression;
+                        var token = expression switch
+                        {
+                            MemberAccessExpressionSyntax member => member.Name.Identifier.Text,
+                            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+                            QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+                            AliasQualifiedNameSyntax alias => alias.Name.Identifier.Text,
+                            _ => (string?)null
+                        };
+                        if (!string.IsNullOrEmpty(token))
+                        {
+                            return token;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
 }
