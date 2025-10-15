@@ -7,6 +7,7 @@ export class RuleRepository implements vscode.Disposable {
 	private readonly ruleEmitter = new vscode.EventEmitter<RuleDescriptor[]>();
 	private readonly documentationCache = new Map<string, RuleDocumentation>();
 	private cachedRules: RuleDescriptor[] = [];
+	private metadataWarningLogged = false;
 
 	public readonly onDidChangeRules = this.ruleEmitter.event;
 
@@ -31,11 +32,23 @@ export class RuleRepository implements vscode.Disposable {
 			if (Array.isArray(descriptors)) {
 				this.cachedRules = descriptors.sort((left, right) => left.id.localeCompare(right.id, 'en'));
 				this.ruleEmitter.fire(this.cachedRules);
+				this.metadataWarningLogged = false;
 			}
-		} catch (error) {
+		} catch (error: unknown) {
+			const rpcError = error as { code?: number } | undefined;
+			const methodNotFound = typeof rpcError?.code === 'number' && rpcError.code === -32601;
 			this.cachedRules = [];
 			this.ruleEmitter.fire(this.cachedRules);
-			await vscode.window.showErrorMessage(vscode.l10n.t('UdonSharp Linter could not load rule metadata. {0}', String(error)));
+			if (methodNotFound) {
+				if (!this.metadataWarningLogged) {
+					this.metadataWarningLogged = true;
+					console.info('[UdonSharp] Rule metadata endpoint unavailable; continuing without rule catalog.');
+				}
+				return;
+			}
+			await vscode.window.showErrorMessage(
+				vscode.l10n.t('UdonSharp Linter could not load rule metadata. {0}', String(error))
+			);
 		}
 	}
 
