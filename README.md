@@ -1,6 +1,6 @@
 # UdonSharp Linter for Visual Studio Code
 
-UdonSharp Linter brings production-grade static analysis for UdonSharp behaviour scripts directly into Visual Studio Code. The extension ships a cross-platform Roslyn-based language server that mirrors the diagnostics produced by the official UdonSharp compiler and VRChat policy packs, while adding responsive editor integrations that work even when Unity or VRChat assemblies are unavailable.
+UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly into Visual Studio Code. The extension ships a cross-platform Roslyn-based language server that mirrors the diagnostics produced by the official UdonSharp compiler and VRChat policy packs, while adding responsive editor integrations that work even when Unity or VRChat assemblies are unavailable.
 
 ---
 
