@@ -12,7 +12,7 @@ UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly
 - **Code action foundation**: The server advertises rule metadata describing which diagnostics can surface quick fixes, enabling incremental rollout of Roslyn code fixes.
 - **Self-contained server runtime**: Bundled .NET 8 binaries for Linux (x64/arm64), macOS (Intel/Apple Silicon), and Windows (x64/arm64) require no user-managed runtime.
 
----
+
 
 ## Rule Coverage Overview
 
@@ -28,7 +28,7 @@ UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly
 
 Each rule is represented by a Roslyn `DiagnosticDescriptor` and surfaced through the Language Server Protocol. Rule documentation is packaged in JSON policy packs and rendered via VS Code’s markdown engine.
 
----
+
 
 ## Commands and UI
 
@@ -40,7 +40,7 @@ Each rule is represented by a Roslyn `DiagnosticDescriptor` and surfaced through
 
 The left-aligned status bar item mirrors the active profile and disabled rule count, and links back to the profile picker for fast changes.
 
----
+
 
 ## Configuration Reference
 
@@ -62,7 +62,7 @@ Additional environment variables:
 - `UDONSHARP_LINTER_SERVER_PATH`: Override the bundled server executable (useful when iterating on the .NET project).
 - `UDONSHARP_LINTER_TELEMETRY`: Set to `0` to force-disable telemetry inside the server process.
 
----
+
 
 ## Installation and Requirements
 
@@ -83,7 +83,7 @@ Additional environment variables:
 4. Publish the server using the provided scripts (`DOTNET_CONFIGURATION=Release ./build_and_publish.sh` on macOS/Linux or `DOTNET_CONFIGURATION=Release ./build_and_publish.ps1` in Windows PowerShell). This populates `resources/server/<RID>/` with platform-specific binaries.
 5. Package the extension with `npx vsce package` or test a development build via `code --extensionDevelopmentPath=/path/to/repo`.
 
----
+
 
 ## Quick Start
 
@@ -99,7 +99,7 @@ Policy packs are JSON documents under `server/PolicyPacks` that describe rule me
 
 You can author custom packs to experiment with new diagnostics or override messaging in localized deployments.
 
----
+
 
 ## Logging and Diagnostics
 
@@ -107,7 +107,7 @@ You can author custom packs to experiment with new diagnostics or override messa
 - Use the VS Code Output panel (`UdonSharp Linter` channel) to inspect client-side lifecycle events.
 - Set `UDONSHARP_LINTER_SERVER_PATH` to a local `dotnet run` output to attach a debugger during server development.
 
----
+
 
 ## Development Workflow
 
@@ -130,7 +130,7 @@ You can author custom packs to experiment with new diagnostics or override messa
 
 The publish script builds self-contained binaries for Windows, macOS, and Linux by default and copies them into `resources/server/<RID>/`. Ensure these assets are committed before tagging a release.
 
----
+
 
 ## Troubleshooting
 
@@ -142,7 +142,6 @@ The publish script builds self-contained binaries for Windows, macOS, and Linux 
 | Using custom Unity stubs | Set `unityApiSurface` to `custom-stubs` and provide `customStubPath`. The server will load all `.dll` files in that directory as metadata references. |
 | Developing the server | Export `UDONSHARP_LINTER_SERVER_PATH=/absolute/path/to/udonsharp-lsp` and run `dotnet publish` separately to test without repacking the extension. |
 
----
 
 ## Contributing
 
@@ -154,7 +153,7 @@ Contributions are welcome. Please open issues for bugs or rule gaps before submi
 
 The project is licensed under the [MIT License](LICENSE).
 
----
+
 
 ## Support
 
