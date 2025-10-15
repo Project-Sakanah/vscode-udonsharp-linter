@@ -511,7 +511,7 @@ internal static class UshAnalyzerUtilities
     }
 
     // ---------------------------------------------------------------------
-    // Syntax-only fallback helpers (no external API symbols required)
+    // Syntax-only fallback helpers
     // ---------------------------------------------------------------------
 
     public static TypeDeclarationSyntax? FindTypeDeclarationInSameDocument(SyntaxNode contextNode, string simpleTypeName)
