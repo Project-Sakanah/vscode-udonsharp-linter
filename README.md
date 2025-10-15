@@ -2,8 +2,6 @@
 
 UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly into Visual Studio Code. The extension ships a cross-platform Roslyn-based language server that mirrors the diagnostics produced by the official UdonSharp compiler and VRChat policy packs, while adding responsive editor integrations that work even when Unity or VRChat assemblies are unavailable.
 
----
-
 ## Feature Highlights
 
 - **Real-time diagnostics**: Roslyn analyzers surface USH0001–USH0045 findings as you type, including network event rules, runtime restrictions, API exposure limits, and language feature bans.
