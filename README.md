@@ -1,5 +1,12 @@
 # UdonSharp Linter for Visual Studio Code
 
+[![Open in Visual Studio Code](https://img.shields.io/static/v1?logo=visualstudiocode&label=&message=Open%20in%20VS%20Code&labelColor=2c2c32&color=007acc&logoColor=007acc)](https://open.vscode.dev/Project-Sakanah/vscode-udonsharp-linter)
+[![Marketplace Version](https://vsmarketplacebadges.dev/version-short/refiaa.vscode-udonsharp-linter.svg)](https://marketplace.visualstudio.com/items?itemName=refiaa.vscode-udonsharp-linter)
+[![Downloads](https://vsmarketplacebadges.dev/downloads-short/refiaa.vscode-udonsharp-linter.svg)](https://marketplace.visualstudio.com/items?itemName=refiaa.vscode-udonsharp-linter)
+[![Installs](https://vsmarketplacebadges.dev/installs-short/refiaa.vscode-udonsharp-linter.svg)](https://marketplace.visualstudio.com/items?itemName=refiaa.vscode-udonsharp-linter)
+[![Rating](https://vsmarketplacebadges.dev/rating-short/refiaa.vscode-udonsharp-linter.svg)](https://marketplace.visualstudio.com/items?itemName=refiaa.vscode-udonsharp-linter)
+
+
 UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly into Visual Studio Code. The extension ships a cross-platform Roslyn-based language server that mirrors the diagnostics produced by the official UdonSharp compiler and VRChat policy packs, while adding responsive editor integrations that work even when Unity or VRChat assemblies are unavailable.
 
 ## Feature Highlights
