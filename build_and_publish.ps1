@@ -1,11 +1,28 @@
 param(
-  [switch]$UseNpmCi # TEMP for CI/CD
+  [switch]$UseNpmCi,
+  [string[]]$RuntimeIdentifiers = @(
+    "win-x64",
+    "linux-x64",
+    "linux-arm64",
+    "osx-x64",
+    "osx-arm64"
+  ),
+  [string]$DotnetConfiguration = "Release"
 )
 
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
+
+if (-not $RuntimeIdentifiers -or $RuntimeIdentifiers.Count -eq 0) {
+  throw "No runtime identifiers provided. Supply values with -RuntimeIdentifiers."
+}
+
+$RuntimeIdentifiers = $RuntimeIdentifiers | Where-Object { $_ -and $_.Trim() -ne "" }
+if ($RuntimeIdentifiers.Count -eq 0) {
+  throw "No runtime identifiers provided. Supply values with -RuntimeIdentifiers."
+}
 
 Write-Host "=== npm install ==="
 if ( (Test-Path "package-lock.json") -and $UseNpmCi ) {
@@ -23,18 +40,31 @@ npm run check-types
 Write-Host "=== npm run compile ==="
 npm run compile
 
-Write-Host "=== dotnet clean/restore/build/publish (server) ==="
-Push-Location "server"
-dotnet clean
-dotnet restore
-dotnet build
-dotnet publish -c Release -r win-x64 --self-contained
-Pop-Location
+$ServerProject = Join-Path $Root "server/UdonSharpLsp.Server.csproj"
 
-Write-Host "=== Copy publish output to resources/server/win-x64 ==="
-$Src  = Join-Path $Root "server/bin/Release/net8.0/win-x64/publish"
-$Dest = Join-Path $Root "resources/server/win-x64"
-New-Item -ItemType Directory -Force -Path $Dest | Out-Null
-Copy-Item (Join-Path $Src "*") $Dest -Recurse -Force
+Write-Host "=== dotnet clean/restore/build (server) ==="
+dotnet clean $ServerProject -c $DotnetConfiguration
+dotnet restore $ServerProject
+dotnet build $ServerProject -c $DotnetConfiguration
+
+foreach ($rid in $RuntimeIdentifiers) {
+  Write-Host "=== dotnet publish (server) [$rid] ==="
+  dotnet publish $ServerProject -c $DotnetConfiguration -r $rid --self-contained
+
+  Write-Host "=== Copy publish output to resources/server/$rid ==="
+  $src  = Join-Path $Root "server/bin/$DotnetConfiguration/net8.0/$rid/publish"
+  $dest = Join-Path $Root "resources/server/$rid"
+
+  if (-not (Test-Path $src)) {
+    throw "Publish output not found at $src"
+  }
+
+  if (Test-Path $dest) {
+    Remove-Item $dest -Recurse -Force
+  }
+
+  New-Item -ItemType Directory -Force -Path $dest | Out-Null
+  Copy-Item (Join-Path $src "*") $dest -Recurse -Force
+}
 
 Write-Host "SUCCESS"
