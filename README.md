@@ -19,35 +19,6 @@ UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly
 - **Self-contained server runtime**: Bundled .NET 8 binaries for Linux (x64/arm64), macOS (Intel/Apple Silicon), and Windows (x64/arm64) require no user-managed runtime.
 
 
-
-## Rule Coverage Overview
-
-| Category          | Rule IDs                        | Highlights                                                                                 |
-|-------------------|---------------------------------|---------------------------------------------------------------------------------------------|
-| Network events    | USH0001–USH0006, USH0043        | Missing targets, non-public handlers, invalid naming, `[NetworkCallable]`, payload typing, sync mode gating, `nameof` guidance |
-| Synchronization   | USH0007–USH0012                 | Sync mode compatibility, tweening restrictions, `UdonSynced` type validation                |
-| Udon API surface  | USH0013–USH0015                 | Blocks access to forbidden Unity/VRChat APIs, members, and types (e.g., `GetComponent`, `Process`) |
-| Runtime limits    | USH0016–USH0021                 | `Instantiate` guardrails, unsupported `is/as`, exception handling, VRChat player event signatures |
-| Language features | USH0022–USH0039                 | Nullable value types, null-conditionals, multidimensional arrays, local functions, generics, static members, `goto`, etc. |
-| Attributes        | USH0040–USH0042                 | `FieldChangeCallback` target validation and duplicate detection                             |
-| Structure         | USH0044–USH0045                 | Namespace requirement and class/file name alignment                                         |
-
-Each rule is represented by a Roslyn `DiagnosticDescriptor` and surfaced through the Language Server Protocol. Rule documentation is packaged in JSON policy packs and rendered via VS Code’s markdown engine.
-
-
-
-## Commands and UI
-
-| Command Palette Entry | Identifier                           | Description                                                                 |
-|-----------------------|--------------------------------------|-----------------------------------------------------------------------------|
-| UdonSharp Linter: Switch Profile | `udonsharpLinter.switchProfile` | Pick from bundled or custom policy packs and immediately reload severities. |
-| UdonSharp Linter: Search Rules…  | `udonsharpLinter.searchRules`  | Filter the rule catalogue by ID, title, or category and open documentation. |
-| UdonSharp Linter: Open Rule Documentation | `udonsharpLinter.openRuleDocs` | Display localized markdown guidance for a specific rule ID.                 |
-
-The left-aligned status bar item mirrors the active profile and disabled rule count, and links back to the profile picker for fast changes.
-
-
-
 ## Configuration Reference
 
 All settings live under the `udonsharpLinter` namespace.
