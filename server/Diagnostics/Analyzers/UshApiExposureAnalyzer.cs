@@ -243,6 +243,11 @@ public sealed class UshApiExposureAnalyzer : DiagnosticAnalyzer
 
     private static bool IsForbiddenGetComponent(IMethodSymbol method)
     {
+        if (method.IsGenericMethod)
+        {
+            return false;
+        }
+
         var definition = method.OriginalDefinition;
         var display = definition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         return ForbiddenMethodNamesNormalized.Contains(NormalizeQualifiedName(display));
