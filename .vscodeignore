@@ -1,8 +1,14 @@
 .vscode/**
 .vscode-test/**
+.idea/**
 out/**
 node_modules/**
-src/**
+client/**
+server/**
+tests/**
+build_and_publish.ps1
+build_and_publish.sh
+vscode-udonsharp-linter.sln
 .gitignore
 .yarnrc
 esbuild.js
