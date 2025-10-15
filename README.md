@@ -2,8 +2,8 @@
 > [!WARNING]
 >
 > This extension is an experimental test build currently under development.  
-> By installing or running this extension, you agree that you are solely responsible for any outcomes or issues that > may arise from its use.  
-> The author(s) and contributors assume **no liability** for any direct, indirect, or incidental damages caused by > the installation, execution, or use of this software.
+> By installing or running this extension, you agree that you are solely responsible for any outcomes or issues that may arise from its use.  
+> The author(s) and contributors assume **no liability** for any direct, indirect, or incidental damages caused by the installation, execution, or use of this software.
 > 
 > This extension is intended **for testing purposes only** and is **not recommended for use in production environments**.
 
