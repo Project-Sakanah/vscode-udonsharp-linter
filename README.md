@@ -71,7 +71,7 @@ Additional environment variables:
 - Operating systems: Windows 10/11 (x64, arm64), macOS 12+ (Intel or Apple Silicon), Ubuntu 20.04+/Debian 11+/other glibc-based Linux (x64 or arm64).
 - No separate .NET runtime is required; the extension ships self-contained binaries published from the `net8.0` server project.
 
-### From the Marketplace
+### From the Marketplace (NOT YET SUPPORTED)
 1. Open the Extensions view in VS Code.
 2. Search for “UdonSharp Linter”.
 3. Install and reload VS Code when prompted.
