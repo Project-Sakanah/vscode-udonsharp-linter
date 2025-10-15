@@ -15,6 +15,8 @@ export class LanguageClientController implements vscode.Disposable {
 	private restartAttempts = 0;
 	private restartPending = false;
 	private statusInterval: NodeJS.Timeout | undefined;
+	// Prevent repetitive info logs when the server status API is unavailable.
+	private warningLoggedForMissingStatus = false;
 	private readonly settingsListener: vscode.Disposable;
 
 	constructor(
@@ -59,6 +61,7 @@ export class LanguageClientController implements vscode.Disposable {
 		try {
 			await client.start();
 			this.restartAttempts = 0;
+			this.warningLoggedForMissingStatus = false;
 			await this.ruleRepository.initialise();
 			await this.requestServerStatus();
 		} catch (error) {
@@ -163,17 +166,43 @@ export class LanguageClientController implements vscode.Disposable {
 	}
 
 	private async requestServerStatus(): Promise<void> {
-		if (!this.client) {
+		const client = this.client;
+		if (!client) {
+			return;
+		}
+		if (!client.isRunning()) {
 			return;
 		}
 		try {
-			const payload = await this.client.sendRequest<ServerStatusPayload>(Requests.serverStatus);
+			const payload = await client.sendRequest<ServerStatusPayload>(Requests.serverStatus);
 			if (payload) {
 				this.statusBar.updateServerStatus(payload);
+				this.warningLoggedForMissingStatus = false;
+				return;
 			}
+			this.statusBar.refreshFromSettings();
 		} catch (error) {
-			// Non-critical; log to output only.
-			console.debug('Failed to request UdonSharp Linter server status', error);
+			const rpcError = error as { code?: number } | undefined;
+			const methodNotFound = typeof rpcError?.code === 'number' && rpcError.code === -32601;
+			if (methodNotFound) {
+				try {
+					const compatPayload = await client.sendRequest<ServerStatusPayload>(Requests.serverStatusCompat);
+					if (compatPayload) {
+						this.statusBar.updateServerStatus(compatPayload);
+						this.warningLoggedForMissingStatus = false;
+						return;
+					}
+				} catch {
+					// Ignore compat failure; fall back to local settings below.
+				}
+				this.statusBar.refreshFromSettings();
+				return;
+			}
+			if (!this.warningLoggedForMissingStatus) {
+				this.warningLoggedForMissingStatus = true;
+				console.info('[UdonSharp] Server status API unavailable; continuing without it.');
+			}
+			this.statusBar.refreshFromSettings();
 		}
 	}
 }

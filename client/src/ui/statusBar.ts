@@ -48,4 +48,8 @@ export class StatusBarController implements vscode.Disposable {
 			: `$(shield) UdonSharp ${profile} · ${disabledCount} off`;
 		this.statusItem.text = text;
 	}
+	
+	public refreshFromSettings(): void {
+		this.updateFromSettings(this.settings.settings);
+	}
 }
