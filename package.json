@@ -5,6 +5,7 @@
   "description": "Real-time UdonSharp static analysis for VSCode with Roslyn-based diagnostics, code actions, and in-editor guidance.",
   "version": "0.1.0",
   "license": "MIT",
+  "icon": "images/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Project-Sakanah/vscode-udonsharp-linter.git"
