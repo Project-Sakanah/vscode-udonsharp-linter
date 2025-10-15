@@ -1,6 +1,5 @@
 
 > [!WARNING]
-> **Disclaimer**
 >
 > This extension is an experimental test build currently under development.  
 > By installing or running this extension, you agree that you are solely responsible for any outcomes or issues that > may arise from its use.  
