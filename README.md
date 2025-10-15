@@ -6,7 +6,6 @@ UdonSharp Linter brings static analysis for UdonSharp behaviour scripts directly
 
 - **Real-time diagnostics**: Roslyn analyzers surface USH0001–USH0045 findings as you type, including network event rules, runtime restrictions, API exposure limits, and language feature bans.
 - **Offline-aware analysis**: Syntax-only fallbacks detect missing custom events, invalid network signatures, and unsupported APIs without Unity or VRChat stub assemblies.
-- **Configurable profiles**: Switch between bundled policy packs (`latest`, `legacy_0.x`, `strict_experimental`) or layer custom JSON packs to align with your world’s moderation target.
 - **Rule intelligence**: Search the full rule catalogue, inspect localized documentation, and review per-profile severities without leaving VS Code.
 - **Status bar telemetry**: A shield badge shows the active profile, disabled rule counts, and live server health. Click it to swap profiles or open rule search.
 - **Code action foundation**: The server advertises rule metadata describing which diagnostics can surface quick fixes, enabling incremental rollout of Roslyn code fixes.
