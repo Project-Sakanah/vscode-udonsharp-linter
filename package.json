@@ -1,8 +1,10 @@
 {
   "name": "vscode-udonsharp-linter",
+  "publisher": "refiaa",
   "displayName": "UdonSharp Linter",
   "description": "Real-time UdonSharp static analysis for VSCode with Roslyn-based diagnostics, code actions, and in-editor guidance.",
   "version": "0.0.1",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.105.0"
   },
